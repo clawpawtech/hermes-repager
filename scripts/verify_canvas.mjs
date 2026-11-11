@@ -1,0 +1,53 @@
+// Real local canvas acceptance. Uses saved live evidence, never mocked browser/API results.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+const base=process.env.REPAGER_DEV_URL || 'http://127.0.0.1:9197';
+const tokenFile=process.env.REPAGER_DEV_TOKEN_FILE;
+const resultFile=process.env.REPAGER_ACCEPTANCE_RESULT;
+const out=process.env.REPAGER_SCREENSHOT_DIR;
+if(!tokenFile||!resultFile||!out)throw Error('Explicit test token/result/output paths required.');
+const token=(await fs.readFile(tokenFile,'utf8')).trim();
+const result=JSON.parse(await fs.readFile(resultFile,'utf8'));
+await fs.mkdir(out,{recursive:true});
+const browser=await chromium.launch({executablePath:process.env.REPAGER_CHROMIUM_PATH,headless:true,chromiumSandbox:process.env.REPAGER_TEST_NO_SANDBOX!=='1'});
+const errors=[];
+try {
+ const context=await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
+ const page=await context.newPage();
+ page.on('pageerror',e=>errors.push(e.message));
+ const response=await context.request.post(base+'/dev/login',{data:{token}});
+ assert.equal(response.status(),204,'Temporary development authentication');
+ await page.goto(base,{waitUntil:'networkidle'});
+ const canvas=page.locator('repager-canvas');
+ await canvas.getByRole('heading',{name:'Make one change. Keep the evidence.'}).waitFor();
+ await page.screenshot({path:path.join(out,'canvas-start-desktop.png'),fullPage:true});
+ await canvas.locator(`[data-action="open"][data-id="${result.review_id}"]`).click();
+ await canvas.getByRole('heading',{name:/Proposed section/}).waitFor();
+ const ready=()=>page.waitForFunction(()=>[...document.querySelector('repager-canvas').shadowRoot.querySelectorAll('img[data-artifact]')].every(e=>e.complete&&e.naturalWidth>0),null,{timeout:20000});
+ await ready();
+ assert.equal(await canvas.getByRole('button',{name:'Download handoff ZIP'}).isEnabled(),true);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Desktop shell fits viewport');
+ await page.screenshot({path:path.join(out,'canvas-verified-desktop.png'),fullPage:true});
+ const download=page.waitForEvent('download');
+ await canvas.getByRole('button',{name:'Download handoff ZIP'}).click();
+ await (await download).saveAs(path.join(out,'canvas-handoff.zip'));
+ await page.setViewportSize({width:390,height:844});
+ await canvas.getByRole('button',{name:'Mobile',exact:true}).first().click();
+ await ready();
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'Mobile shell fits viewport');
+ const widths=await canvas.locator('img[data-artifact]').evaluateAll(images=>images.map(e=>e.naturalWidth));
+ assert.ok(widths.every(w=>w===390),'Every selected mobile comparison is actually the mobile screenshot');
+ await page.screenshot({path:path.join(out,'canvas-verified-mobile.png'),fullPage:true});
+ await canvas.getByRole('button',{name:'Dark theme'}).click();
+ await ready();
+ assert.equal(await canvas.getAttribute('theme'),'dark');
+ await page.screenshot({path:path.join(out,'canvas-verified-mobile-dark.png'),fullPage:true});
+ assert.deepEqual(errors,[],'No browser JavaScript errors');
+ const receipt={review_id:result.review_id,desktop:{width:1440,height:1000},mobile:{width:390,height:844},mobile_image_widths:widths,downloaded:true,theme_toggle:true,browser_errors:errors};
+ await fs.writeFile(path.join(out,'canvas-result.json'),JSON.stringify(receipt,null,2));
+ console.log(JSON.stringify(receipt));
+ await context.close();
+} finally {await browser.close();}

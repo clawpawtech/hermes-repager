@@ -1,0 +1,40 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.14"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - run: git diff --exit-code -- dashboard/dist/index.js
+      - run: node --check dashboard/dist/index.js
+      - run: python scripts/run_tests.py --receipt artifacts/ci/python-tests.json
+        env:
+          TMPDIR: ${{ runner.temp }}
+      - run: npm test
+# Live Chromium/network/model tests are deliberately opt-in and documented.
+# CI never supplies model credentials and never presents offline fixtures as live proof.

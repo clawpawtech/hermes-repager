@@ -1,0 +1,38 @@
+name: repager
+version: 0.3.0
+provides_tools:
+  - repager_capture
+  - repager_get
+  - repager_scope
+  - repager_list
+  - repager_approve
+  - repager_generate
+  - repager_remix
+  - repager_decide
+  - repager_verify
+  - repager_export
+manifest_version: 1
+description: Evidence-bound hero design lab with approved copy, four local directions, retained decision history, readable-output checks and portable review handoffs.
+author: clawpawtech
+homepage: https://github.com/clawpawtech/hermes-repager
+requires_hermes: ">=0.22.5"
+python_dependencies:
+  - "fastapi>=0.115,<1"
+  - "pydantic>=2,<3"
+config_schema:
+  chromium_path:
+    type: str
+    default: ""
+    description: Optional absolute path to pre-provisioned Chromium. No automatic downloads.
+  allow_no_sandbox:
+    type: bool
+    default: false
+    description: Explicit Chromium OS sandbox opt-out for a dedicated container only.
+  browser_temp_dir:
+    type: str
+    default: ""
+    description: Optional short absolute trusted scratch directory, at most 50 bytes, for Chromium Unix sockets. No system-temp fallback.
+  allow_model_calls:
+    type: bool
+    default: false
+    description: Consent to send captured public text and your brief to the host model. Off until enabled.

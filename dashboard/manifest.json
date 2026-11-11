@@ -1,0 +1,10 @@
+{
+  "name": "repager",
+  "label": "repager",
+  "description": "Controlled page changes, captured evidence and revision-bound browser checks.",
+  "icon": "PanelsTopLeft",
+  "version": "0.3.0",
+  "tab": {"path": "/repager", "position": "after:skills"},
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}

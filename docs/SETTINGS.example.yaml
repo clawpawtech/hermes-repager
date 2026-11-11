@@ -1,0 +1,20 @@
+# Merge deliberately into your own Hermes configuration; never overwrite it.
+# Paths are examples to replace with YOUR trusted browser/scratch locations.
+plugins:
+  enabled: [repager]
+  entries:
+    repager:
+      settings:
+        chromium_path: /absolute/path/to/pre-provisioned/chromium
+        browser_temp_dir: /short/trusted/scratch
+        allow_model_calls: false  # explicit data consent required before generation
+        allow_no_sandbox: false   # keep OS sandbox; opt out only in a dedicated container
+auxiliary:
+  repager_layout:
+    provider: openai-codex      # replace if using a different explicit non-free host provider
+    model: YOUR_NON_FREE_MODEL # exact host model identifier, no separate API key
+    fallback_chain: []
+# No fallback lane is permitted for inference in this release. Merge deliberately.
+fallback_providers: []
+fallback_model: {}  # null is also an explicit disabled legacy fallback
+# repager does not apply this example automatically.

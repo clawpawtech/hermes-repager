@@ -1,0 +1,22 @@
+{
+  "name": "repager-browser",
+  "version": "0.3.0",
+  "description": "Isolated real-browser capture and preview verification for repager.",
+  "private": true,
+  "license": "MIT",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "playwright": "1.65.0",
+    "ipaddr.js": "2.5.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "node --test tests/*-node.cjs",
+    "build": "node scripts/build_dashboard.mjs",
+    "test:browser": "node --test tests/*-node.cjs",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_browser.py' -v"
+  }
+}

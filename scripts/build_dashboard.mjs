@@ -1,0 +1,16 @@
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+const root=new URL('../',import.meta.url),dist=new URL('dashboard/dist/',root);
+const wordmark=await readFile(new URL('dashboard/brand/wordmark.svg',root),'utf8');
+const favicon=await readFile(new URL('dashboard/brand/favicon.svg',root),'utf8');
+if(!wordmark.includes('data-brand-letter="p"')||/<(?:script|foreignObject|image|text)\b/i.test(wordmark)||/\bhref\s*=/i.test(wordmark))throw Error('Expected trusted, font-independent wordmark paths');
+if(!favicon.startsWith('<svg')||/<(?:script|foreignObject|image)\b/i.test(favicon)||/\bhref\s*=/i.test(favicon))throw Error('Expected trusted self-contained favicon');
+const uri='data:image/svg+xml;base64,'+Buffer.from(favicon).toString('base64');
+const source=await readFile(new URL('dashboard/src/canvas.js',root),'utf8');
+const marker="const BRAND={wordmark:'repager',favicon:''};";
+if(source.split(marker).length!==2)throw Error('Missing/duplicate brand build marker');
+const bundle=source.replace(marker,'const BRAND='+JSON.stringify({wordmark,favicon:uri})+';');
+const html=(await readFile(new URL('dashboard/src/standalone.html',root),'utf8')).replace('<!-- BRAND_FAVICON -->',`<link rel="icon" type="image/svg+xml" href="${uri}">`);
+await mkdir(dist,{recursive:true});
+await writeFile(new URL('index.js',dist),bundle);
+await writeFile(new URL('dashboard/index.html',root),html);
+console.log('Built self-contained dashboard with outlined wordmark and exact embedded favicon. No runtime font or branding requests.');

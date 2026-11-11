@@ -1,0 +1,47 @@
+// Reopen durable evidence after an actual native dashboard process restart. No model call.
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {chromium} from 'playwright';
+const out=process.env.REPAGER_SCREENSHOT_DIR;
+if(!out)throw Error('Explicit artifact directory required');
+const expected=JSON.parse(await fs.readFile(path.join(out,'verified.json'),'utf8'));
+const browser=await chromium.launch({executablePath:process.env.REPAGER_CHROMIUM_PATH,chromiumSandbox:process.env.REPAGER_TEST_NO_SANDBOX!=='1'});
+try{
+ const context=await browser.newContext({viewport:{width:390,height:844},acceptDownloads:true});
+ const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto((process.env.REPAGER_NATIVE_URL||'http://127.0.0.1:9121')+'/repager');
+ const canvas=page.locator('repager-canvas');
+ await canvas.locator('details.saved > summary').click();
+ await canvas.locator(`button.run[data-id="${expected.id}"]`).click();
+ await page.waitForFunction(id=>document.querySelector('repager-canvas')?.review?.id===id,expected.id);
+ const actual=await canvas.evaluate(c=>c.review);
+ assert.equal(actual.revisions.at(-1).artifact_hash,expected.revisions.at(-1).artifact_hash);
+ assert.equal(actual.verification.signature,expected.verification.signature);
+ assert.equal(await canvas.getByRole('button',{name:'Download handoff ZIP',exact:true}).isEnabled(),true);
+ const download=page.waitForEvent('download');await canvas.getByRole('button',{name:'Download handoff ZIP',exact:true}).click();
+ await (await download).saveAs(path.join(out,'resumed-handoff.zip'));
+ await canvas.getByRole('button',{name:'Change approved scope',exact:true}).click();
+ assert.equal(await canvas.locator('form[data-form=approve]').isVisible(),true);
+ await canvas.getByRole('button',{name:'Cancel scope change',exact:true}).click();
+ await canvas.locator('select[name=revision]').selectOption('1');
+ assert.equal(await canvas.getByRole('button',{name:'Download handoff ZIP',exact:true}).isEnabled(),false);
+ await canvas.locator('select[name=revision]').selectOption('2');
+ const reportDownload=page.waitForEvent('download');
+ await canvas.getByRole('button',{name:/Download visual report/}).click();
+ await (await reportDownload).saveAs(path.join(out,'review.html'));
+ await canvas.locator('select[name=revision]').selectOption('1');
+ await canvas.getByRole('button',{name:'Restore as new current revision',exact:true}).click();
+ await page.waitForFunction(()=>{const c=document.querySelector('repager-canvas');return !c.busy&&(c.error||c.review?.revisions.length===3);});
+ const restored=await canvas.evaluate(c=>c.review);
+ assert.equal(restored.revisions.length,3,await canvas.evaluate(c=>c.error));
+ assert.equal(restored.revisions[2].origin,'local-remix');assert.equal(restored.revisions[2].model,null);
+ assert.equal(restored.revisions[2].artifact_hash,expected.revisions[0].artifact_hash);
+ assert.equal(restored.verification,null);assert.equal(restored.decision,null);
+ assert.equal(await canvas.getByRole('button',{name:'Download handoff ZIP',exact:true}).isEnabled(),false);
+ await fs.writeFile(path.join(out,'restored.json'),JSON.stringify(restored,null,2));
+ assert.deepEqual(errors,[]);
+ const proof={review_id:actual.id,artifact_hash:actual.revisions.at(-1).artifact_hash,receipt_signature_unchanged:true,authenticated_export_after_restart:true,scope_editor:true,historical_export_disabled:true,restore_as_new_revision:true,restored_receipt_invalidated:true,browser_errors:errors,model_calls:0};
+ await fs.writeFile(path.join(out,'resume-proof.json'),JSON.stringify(proof,null,2));console.log(JSON.stringify(proof));
+ await context.close();
+}finally{await browser.close();}
